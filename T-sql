@@ -82,3 +82,11 @@ WHERE   r.name IN ('mediumrc','largerc','xlargerc','staticrc10','staticrc20','st
 --for each row returned run
 sp_droprolemember '[Resource Class]', membername
 
+--T_SQL to monitor workload
+
+select b.request_id,b.submit_time,b.start_time,b.status,b.resource_class,b.importance,b.resource_allocation_percentage ,
+c.cap_percentage_resource
+from sys.dm_pdw_exec_requests b left join
+ [sys].[workload_management_workload_classifiers]    a on b.classifier_name=a.[name]
+ left join  [sys].[workload_management_workload_groups]  c on b.resource_class=c.[name]
+where b.status in ('running','suspended')  and  b.session_id <>session_id();
