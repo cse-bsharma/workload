@@ -1,0 +1,84 @@
+SQLs
+--master
+create login etluser with password = 'XXXXXXXX';
+create login reportuser with password = 'XXXXXXXXX'
+--Database
+create user etluser from login etluser;
+create user reportuser from login reportuser;
+
+CREATE ROLE etl AUTHORIZATION dbo;
+CREATE ROLE report AUTHORIZATION dbo;
+
+exec sp_addrolemember db_datareader , etl;
+exec sp_addrolemember db_datareader , report;
+exec sp_addrolemember etl,etluser;
+exec sp_addrolemember report,reportuser
+
+
+--Business hours
+CREATE WORKLOAD GROUP reporting
+WITH
+  ( MIN_PERCENTAGE_RESOURCE = 0               
+    , REQUEST_MIN_RESOURCE_GRANT_PERCENT = 50  --(Demo only )this is adjusted as per the concuency and resource requirement
+    , CAP_PERCENTAGE_RESOURCE = 100
+    ,IMPORTANCE =HIGH );
+
+    CREATE WORKLOAD GROUP etl_0 
+WITH
+  ( MIN_PERCENTAGE_RESOURCE = 0               
+    , REQUEST_MIN_RESOURCE_GRANT_PERCENT = 25 
+    , CAP_PERCENTAGE_RESOURCE = 50
+    ,IMPORTANCE =NORMAL );
+
+-- NON-BUSINESS Hours
+    CREATE WORKLOAD GROUP etl_1 
+WITH
+  ( MIN_PERCENTAGE_RESOURCE = 0              
+    , REQUEST_MIN_RESOURCE_GRANT_PERCENT = 50
+    , CAP_PERCENTAGE_RESOURCE = 100
+    ,IMPORTANCE =NORMAL );
+
+--Workload Classification
+CREATE WORKLOAD CLASSIFIER wcELTLoads_0 WITH  
+( WORKLOAD_GROUP = 'etl_0'
+ ,MEMBERNAME     = 'etl'  
+ ,START_TIME     = '12:00'
+ ,END_TIME       = '21:00' )
+ CREATE WORKLOAD CLASSIFIER wcELTLoads_1 WITH  
+( WORKLOAD_GROUP = 'etl_1'
+ ,MEMBERNAME     = 'etl'  
+ ,START_TIME     = '21:00'
+ ,END_TIME       = '11:59' )
+
+ CREATE WORKLOAD CLASSIFIER wcREPORT WITH  
+( WORKLOAD_GROUP = 'reporting'
+ ,MEMBERNAME     = 'report'  
+ )
+
+--Workload DMVs
+
+
+select * from [sys].[dm_workload_management_workload_groups_stats]       ;
+select * from [sys].[workload_management_workload_classifier_details]    ;
+select * from [sys].[workload_management_workload_classifiers]           ;
+select * from [sys].[workload_management_workload_groups]                ; 
+
+select a.name as workload_name,a.importance,a.min_percentage_resource,a.cap_percentage_resource,a.request_max_resource_grant_percent
+,b.name as classifier_name from [sys].[workload_management_workload_groups]     a inner join 
+[sys].[workload_management_workload_classifiers] b on
+a.name=b.group_name ;
+
+
+-- To simplify troubleshooting misclassification, we recommended you remove resource class role mappings 
+-- as you create workload classifiers. The code below returns existing resource class role memberships. 
+-- Run sp_droprolemember for each member name returned from the corresponding resource class.
+
+SELECT  r.name AS [Resource Class]
+,       m.name AS membername
+FROM    sys.database_role_members rm
+JOIN    sys.database_principals AS r ON rm.role_principal_id = r.principal_id
+JOIN    sys.database_principals AS m ON rm.member_principal_id = m.principal_id
+WHERE   r.name IN ('mediumrc','largerc','xlargerc','staticrc10','staticrc20','staticrc30','staticrc40','staticrc50','staticrc60','staticrc70','staticrc80');
+--for each row returned run
+sp_droprolemember '[Resource Class]', membername
+
